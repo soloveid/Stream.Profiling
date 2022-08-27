@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
 using System.IO;
-using Stream.Profiling.Common;
 using Stream.Profiling.MyVersion01;
 using Stream.Profiling.PodkolzzzinVersion;
 
@@ -11,11 +10,13 @@ namespace Stream.Profiling
     {
         static void Main(string[] args)
         {
-            var totalLinesCount = 2_000_000;
             var partLinesCount = 200_000;
+            var filesCount = 10;
+            var totalLinesCount = filesCount * partLinesCount;
             var allLinesFileName = $"L{totalLinesCount}.txt";
             var sortedResultFilePodkolzin = "resultPodkolzin.txt";
             var sortedResultFileMyVersion01 = "resultMyVersion01.txt";
+            var sortedResultFileMyVersion02 = "resultMyVersion02.txt";
 
             foreach (var file in Directory.EnumerateFiles(".", "*.txt"))
                 File.Delete(file);
@@ -39,7 +40,18 @@ namespace Stream.Profiling
             GC.Collect(2, GCCollectionMode.Forced);
             GC.Collect(2, GCCollectionMode.Forced);
 
-            CompareResults(new SortResult(files1, sortedResultFilePodkolzin), new SortResult(files2, sortedResultFileMyVersion01));
+            Console.WriteLine();
+            Console.WriteLine("My version 02:");
+            GC.Collect(2, GCCollectionMode.Forced);
+            GC.Collect(2, GCCollectionMode.Forced);
+            var files3 = RunMyVersion02(allLinesFileName, filesCount, partLinesCount, sortedResultFileMyVersion02);
+            GC.Collect(2, GCCollectionMode.Forced);
+            GC.Collect(2, GCCollectionMode.Forced);
+
+            CompareResultFiles(sortedResultFilePodkolzin, sortedResultFileMyVersion01);
+            CompareBatchResults(files1, files2);
+
+            CompareResultFiles(sortedResultFilePodkolzin, sortedResultFileMyVersion02);
         }
 
         static string[] RunPodkolzinVersion(string fileName, int batchLinesCount, string resultFileName)
@@ -79,32 +91,56 @@ namespace Stream.Profiling
             return files.ToArray();
         }
 
-        static void CompareResults(SortResult etalonResult, SortResult result1)
+        static string[] RunMyVersion02(string fileName, int filesCount, int expectedPartLinesCount, string resultFileName)
         {
-            if (etalonResult.SortedBatchFiles.Length != result1.SortedBatchFiles.Length)
+            var totalStopWatch = Stopwatch.StartNew();
+
+            var stopWatch = Stopwatch.StartNew();
+            var partsSorter = new MyVersion02.PartsSorter(fileName, filesCount, expectedPartLinesCount);
+            var files = partsSorter.Split();
+            partsSorter.SortParts(files);
+            Console.WriteLine($"Parts sorting: elapsed {stopWatch.ElapsedMilliseconds:N} ms");
+
+            stopWatch.Restart();
+            new MyVersion02.PartsMerger(resultFileName, files).Merge();
+            Console.WriteLine($"Parts merging: elapsed {stopWatch.ElapsedMilliseconds:N} ms");
+
+            Console.WriteLine($"Total elapsed {totalStopWatch.ElapsedMilliseconds:N} ms");
+
+            Console.WriteLine();
+
+            return files.ToArray();
+        }
+
+        static void CompareBatchResults(string[] etalonBatches, string[] batches)
+        {
+            if (etalonBatches.Length != batches.Length)
             {
                 Console.WriteLine("Количество батчей отличается");
                 throw new InvalidProgramException();
             }
 
-            for (var i = 0; i < etalonResult.SortedBatchFiles.Length; i++)
+            for (var i = 0; i < etalonBatches.Length; i++)
             {
-                var file1Context = File.ReadAllText(etalonResult.SortedBatchFiles[i]);
-                var file2Context = File.ReadAllText(result1.SortedBatchFiles[i]);
+                var file1Context = File.ReadAllText(etalonBatches[i]);
+                var file2Context = File.ReadAllText(batches[i]);
 
                 if (file1Context != file2Context)
                 {
-                    Console.WriteLine($"Содержимое батчей {etalonResult.SortedBatchFiles[i]} и {result1.SortedBatchFiles[i]} различно");
+                    Console.WriteLine($"Содержимое батчей {etalonBatches[i]} и {batches[i]} различно");
                     throw new InvalidProgramException();
                 }
             }
+        }
 
-            var file1Lines = File.ReadAllLines(etalonResult.SortedResultFile);
-            var file2Lines = File.ReadAllLines(result1.SortedResultFile);
+        static void CompareResultFiles(string etalonResult, string result)
+        {
+            var file1Lines = File.ReadAllLines(etalonResult);
+            var file2Lines = File.ReadAllLines(result);
 
             if (file1Lines.Length != file2Lines.Length)
             {
-                Console.WriteLine($"Количество строк в результирующих файлах {etalonResult.SortedResultFile} и {result1.SortedResultFile} различно");
+                Console.WriteLine($"Количество строк в результирующих файлах {etalonResult} и {result} различно");
                 throw new InvalidProgramException();
             }
 
@@ -112,7 +148,7 @@ namespace Stream.Profiling
             {
                 if (file1Lines[i] != file2Lines[i])
                 {
-                    Console.WriteLine($"Несовпадают строки {i + 1} в результирующих файлах {etalonResult.SortedResultFile} и {result1.SortedResultFile}");
+                    Console.WriteLine($"Несовпадают строки {i + 1} в результирующих файлах {etalonResult} и {result}");
                     Console.WriteLine(file1Lines[i]);
                     Console.WriteLine(" VS ");
                     Console.WriteLine(file2Lines[i]);
