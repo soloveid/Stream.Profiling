@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace Stream.Profiling
+namespace Stream.Profiling.PodkolzzzinVersion
 {
     struct Line : IComparable<Line>
     {
